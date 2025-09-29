@@ -1,0 +1,1 @@
+# Segmentation services - AI models for background removal
