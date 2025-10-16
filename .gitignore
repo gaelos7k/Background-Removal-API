@@ -40,9 +40,10 @@ env/
 htmlcov/
 .tox/
 
-# Model files (very large)
-*.pth
-*.pt
+# Model files (very large) - COMENTE ESTA LINHA OU REMOVA
+# *.pth  ← COMENTADO PARA PERMITIR u2net.pth
+
+# Other model formats
 *.onnx
 *.pb
 
