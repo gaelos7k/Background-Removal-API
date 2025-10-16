@@ -1,0 +1,2 @@
+*.pth filter=lfs diff=lfs merge=lfs -text
+U-2-Net/saved_models/**/*.pth filter=lfs diff=lfs merge=lfs -text
