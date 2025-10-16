@@ -1,4 +1,5 @@
 from typing import Optional
+from io import BytesIO
 
 # Importa a entidade do domínio
 from app.domain.entities import Imagem
@@ -7,6 +8,7 @@ from app.domain.entities import Imagem
 class RemocaoFundoService:
     """
     Serviço de aplicação responsável por orquestrar a remoção de fundo de imagens.
+    Processa imagens em memória sem salvar arquivos localmente.
     """
     def __init__(self, segmentador):
         """
@@ -14,15 +16,16 @@ class RemocaoFundoService:
         """
         self.segmentador = segmentador
 
-    def remover_fundo(self, imagem: Imagem, caminho_saida: str) -> Optional[Imagem]:
+    def remover_fundo(self, imagem_bytes: bytes, formato_saida: str = "PNG") -> Optional[BytesIO]:
         """
-        Orquestra a remoção de fundo da imagem.
-        - imagem: objeto Imagem de entrada
-        - caminho_saida: onde salvar a imagem sem fundo
-        Retorna um novo objeto Imagem com o caminho do arquivo de saída.
+        Orquestra a remoção de fundo da imagem processando em memória.
+        
+        Args:
+            imagem_bytes: Bytes da imagem de entrada
+            formato_saida: Formato da imagem de saída (PNG, JPEG, etc.)
+        
+        Returns:
+            BytesIO contendo a imagem processada ou None se houver erro
         """
-        sucesso = self.segmentador.remover_fundo(imagem.caminho_arquivo, caminho_saida)
-        if sucesso:
-            # Cria novo objeto Imagem para o resultado
-            return Imagem(caminho_arquivo=caminho_saida)
-        return None
+        resultado = self.segmentador.remover_fundo(imagem_bytes, formato_saida)
+        return resultado

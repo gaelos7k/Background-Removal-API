@@ -2,104 +2,168 @@ import sys
 import os
 import subprocess
 import shutil
-from typing import Optional
+from typing import Optional, Union
+from io import BytesIO
 import numpy as np
 from PIL import Image
+import torch
+from torchvision import transforms
+from torch.autograd import Variable
 
 class U2NetService:
     """
     Serviço de infraestrutura responsável por executar o modelo U²-Net para remoção de fundo.
+    Processa imagens em memória sem salvar arquivos localmente.
     """
     def __init__(self, u2net_dir: Optional[str] = None):
         # Caminho para o diretório do U²-Net
         self.u2net_dir = u2net_dir or os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../U-2-Net'))
+        self.model = None
+        self.model_loaded = False
+        self._carregar_modelo()
 
-    def remover_fundo(self, caminho_entrada: str, caminho_saida: str) -> bool:
-        """
-        Executa o script do U²-Net para remover o fundo da imagem (segmentação de produtos).
-        - caminho_entrada: caminho da imagem original
-        - caminho_saida: caminho do arquivo de saída (imagem sem fundo, não é usado diretamente)
-        Retorna True se o processamento foi bem-sucedido.
-        """
-        # Script do U²-Net para segmentação de objetos/produtos
-        script_path = os.path.join(self.u2net_dir, 'u2net_test.py')
-        # Caminho do modelo (no diretório do projeto, não do U²-Net)
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../'))
-        model_path = os.path.join(project_root, 'saved_models', 'u2net', 'u2net.pth')
-        # Diretório de saída
-        output_dir = os.path.dirname(caminho_saida)
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"DEBUG: Output directory: {output_dir}")
-        print(f"DEBUG: Input file exists: {os.path.exists(caminho_entrada)}")
-        print(f"DEBUG: U2Net script exists: {os.path.exists(script_path)}")
+        self.model = None
+        self.model_loaded = False
+        self._carregar_modelo()
 
-        # Usa o diretório de uploads como parâmetro para o script
-        upload_dir = os.path.dirname(caminho_entrada)
-
-        # Monta o comando para rodar o script do U²-Net
-        command = [
-            sys.executable,
-            script_path,
-            '--image_path', upload_dir,
-            '--output_dir', output_dir,
-            '--model_path', model_path
-        ]
-        print(f"Executando: {' '.join(command)}")
-        print(f"DEBUG: Working directory: {self.u2net_dir}")
+    def _carregar_modelo(self):
+        """Carrega o modelo U2Net em memória uma única vez."""
         try:
-            result = subprocess.run(command, capture_output=True, text=True, cwd=self.u2net_dir)
-            print("STDOUT:", result.stdout)
-            print("STDERR:", result.stderr)
-            print("RETURN CODE:", result.returncode)
-            # O script gera o arquivo removendo a extensão original (ex: input.jpg -> input.png)
-            base_name = os.path.splitext(os.path.basename(caminho_entrada))[0]
-            saida_gerada = os.path.join(output_dir, f"{base_name}.png")
-            # Aplica a máscara na imagem original para remover o fundo
-            if os.path.exists(saida_gerada):
-                self._aplicar_mascara_remover_fundo(caminho_entrada, saida_gerada, caminho_saida)
-                return True
+            # Adiciona o diretório U2Net ao path para importar os módulos
+            sys.path.insert(0, self.u2net_dir)
+            from model import U2NET
+            
+            model_path = os.path.join(self.u2net_dir, 'saved_models', 'u2net', 'u2net.pth')
+            
+            if not os.path.exists(model_path):
+                print(f"ERRO: Modelo não encontrado em {model_path}")
+                return
+            
+            print(f"Carregando modelo U2Net de {model_path}...")
+            self.model = U2NET(3, 1)
+            
+            if torch.cuda.is_available():
+                self.model.load_state_dict(torch.load(model_path))
+                self.model.cuda()
+                print("Modelo carregado na GPU")
             else:
-                print(f"Arquivo de saída não encontrado: {saida_gerada}")
-                return False
-        except subprocess.CalledProcessError as e:
-            print(f"Erro ao executar U²-Net: {e.stderr}")
-            return False
-
-    def _aplicar_mascara_remover_fundo(self, imagem_original: str, mascara_path: str, saida_path: str):
-        """
-        Aplica a máscara na imagem original para remover o fundo, gerando uma imagem com transparência.
-        """
-        try:
-            # Carrega a imagem original
-            img_original = Image.open(imagem_original).convert("RGBA")
+                self.model.load_state_dict(torch.load(model_path, map_location='cpu'))
+                print("Modelo carregado na CPU")
             
-            # Carrega a máscara (gerada pelo U²-Net)
-            mascara = Image.open(mascara_path).convert("L")  # Converte para escala de cinza
-            
-            # Redimensiona a máscara para o tamanho da imagem original, se necessário
-            if mascara.size != img_original.size:
-                mascara = mascara.resize(img_original.size, Image.LANCZOS)
-            
-            # Converte máscara para array numpy para processamento
-            mascara_array = np.array(mascara)
-            
-            # Normaliza a máscara (0-255 para 0-1)
-            mascara_norm = mascara_array / 255.0
-            
-            # Aplica a máscara no canal alfa (transparência)
-            img_array = np.array(img_original)
-            img_array[:, :, 3] = (mascara_norm * 255).astype(np.uint8)
-            
-            # Cria a imagem final com fundo removido
-            img_sem_fundo = Image.fromarray(img_array, "RGBA")
-            
-            # Salva a imagem final
-            img_sem_fundo.save(saida_path, "PNG")
-            print(f"Imagem sem fundo salva em: {saida_path}")
+            self.model.eval()
+            self.model_loaded = True
+            print("Modelo U2Net carregado com sucesso!")
             
         except Exception as e:
-            print(f"Erro ao aplicar máscara: {e}")
-            # Fallback: copia a máscara se houver erro
-            shutil.copy(mascara_path, saida_path)
+            print(f"Erro ao carregar modelo U2Net: {e}")
+            self.model_loaded = False
+
+    def remover_fundo(self, imagem_bytes: Union[bytes, BytesIO], formato_saida: str = "PNG") -> Optional[BytesIO]:
+        """
+        Remove o fundo de uma imagem processando em memória.
+        
+        Args:
+            imagem_bytes: Bytes da imagem de entrada ou objeto BytesIO
+            formato_saida: Formato da imagem de saída (PNG, JPEG, etc.)
+        
+        Returns:
+            BytesIO contendo a imagem processada com fundo removido, ou None se houver erro
+        """
+        if not self.model_loaded:
+            print("ERRO: Modelo não foi carregado corretamente")
+            return None
+        
+        try:
+            # Converte bytes para PIL Image
+            if isinstance(imagem_bytes, bytes):
+                imagem_bytes = BytesIO(imagem_bytes)
+            
+            imagem_original = Image.open(imagem_bytes).convert("RGB")
+            tamanho_original = imagem_original.size
+            
+            print(f"Processando imagem {tamanho_original[0]}x{tamanho_original[1]}...")
+            
+            # Prepara a imagem para o modelo
+            imagem_tensor = self._preparar_imagem(imagem_original)
+            
+            # Executa a inferência
+            with torch.no_grad():
+                if torch.cuda.is_available():
+                    imagem_tensor = imagem_tensor.cuda()
+                
+                d1, d2, d3, d4, d5, d6, d7 = self.model(imagem_tensor)
+                
+                # Normaliza a predição
+                pred = d1[:, 0, :, :]
+                pred = self._normalizar_pred(pred)
+                
+                # Converte para numpy
+                mascara = pred.squeeze().cpu().data.numpy()
+            
+            # Cria a máscara em PIL Image
+            mascara_img = Image.fromarray((mascara * 255).astype(np.uint8)).convert('L')
+            mascara_img = mascara_img.resize(tamanho_original, Image.LANCZOS)
+            
+            # Aplica a máscara na imagem original
+            imagem_resultado = self._aplicar_mascara(imagem_original, mascara_img)
+            
+            # Converte para BytesIO
+            output_buffer = BytesIO()
+            imagem_resultado.save(output_buffer, format=formato_saida)
+            output_buffer.seek(0)
+            
+            print(f"Processamento concluído! Tamanho do resultado: {len(output_buffer.getvalue())} bytes")
+            
+            return output_buffer
+            
+        except Exception as e:
+            print(f"Erro ao processar imagem: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _preparar_imagem(self, imagem: Image.Image) -> torch.Tensor:
+        """Prepara a imagem para inferência no modelo."""
+        transform = transforms.Compose([
+            transforms.Resize((320, 320)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        
+        tensor = transform(imagem).unsqueeze(0)
+        return tensor
+
+    def _normalizar_pred(self, pred: torch.Tensor) -> torch.Tensor:
+        """Normaliza a predição do modelo."""
+        ma = torch.max(pred)
+        mi = torch.min(pred)
+        return (pred - mi) / (ma - mi + 1e-8)
+
+    def _aplicar_mascara(self, imagem_original: Image.Image, mascara: Image.Image) -> Image.Image:
+        """
+        Aplica a máscara na imagem original para remover o fundo.
+        
+        Args:
+            imagem_original: Imagem original em RGB
+            mascara: Máscara em escala de cinza (L)
+        
+        Returns:
+            Imagem com fundo removido (RGBA)
+        """
+        # Converte para RGBA se necessário
+        if imagem_original.mode != 'RGBA':
+            imagem_original = imagem_original.convert('RGBA')
+        
+        # Converte para arrays numpy
+        img_array = np.array(imagem_original)
+        mascara_array = np.array(mascara)
+        
+        # Aplica a máscara no canal alfa
+        img_array[:, :, 3] = mascara_array
+        
+        # Cria a imagem final
+        imagem_resultado = Image.fromarray(img_array, 'RGBA')
+        
+        return imagem_resultado
 
 __all__ = ["U2NetService"]
