@@ -36,6 +36,15 @@ class U2NetService:
         model_path = project_root / "U-2-Net" / "saved_models" / "u2net" / "u2net.pth"
 
         if not model_path.exists():
+            model_path = Path(__file__).parent.parent.parent.parent.parent / \
+            "U-2-Net" / "saved_models" / "u2net" / "u2net.pth"
+
+        # Fallback absoluto
+        if not model_path.exists():
+            model_path = Path(
+            "/opt/render/project/src/U-2-Net/saved_models/u2net/u2net.pth")
+
+        if not model_path.exists():
             raise FileNotFoundError(f"Modelo não encontrado: {model_path}")
 
         try:

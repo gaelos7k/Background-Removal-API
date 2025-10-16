@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: bemasnap-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "cd backend && python main.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: PORT
+        sync: false
