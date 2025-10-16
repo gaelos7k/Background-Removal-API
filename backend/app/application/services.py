@@ -1,9 +1,6 @@
 from typing import Optional
 from io import BytesIO
 
-# Importa a entidade do domínio
-from app.domain.entities import Imagem
-
 
 class RemocaoFundoService:
     """

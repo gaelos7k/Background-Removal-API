@@ -1,14 +1,11 @@
 import sys
 import os
-import subprocess
-import shutil
 from typing import Optional, Union
 from io import BytesIO
 import numpy as np
 from PIL import Image
 import torch
 from torchvision import transforms
-from torch.autograd import Variable
 
 class U2NetService:
     """

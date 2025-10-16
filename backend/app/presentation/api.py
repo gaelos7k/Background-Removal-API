@@ -16,10 +16,6 @@ app = FastAPI(
 u2net_service = U2NetService()
 remocao_service = RemocaoFundoService(segmentador=u2net_service)
 
-# Instancia o serviço de infraestrutura e o serviço de aplicação
-u2net_service = U2NetService()
-remocao_service = RemocaoFundoService(segmentador=u2net_service)
-
 
 @app.get("/")
 async def root():
