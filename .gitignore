@@ -40,8 +40,6 @@ env/
 htmlcov/
 .tox/
 
-# Model files (very large) - COMENTE ESTA LINHA OU REMOVA
-# *.pth  ← COMENTADO PARA PERMITIR u2net.pth
 
 # Other model formats
 *.onnx
@@ -56,7 +54,6 @@ temp_results/
 # Environment variables
 .env
 .env.local
-.yaml
 
 # OS
 Thumbs.db
