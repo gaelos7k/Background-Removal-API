@@ -56,7 +56,7 @@ temp_results/
 # Environment variables
 .env
 .env.local
-render.yaml
+.yaml
 
 # OS
 Thumbs.db
