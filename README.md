@@ -1,4 +1,4 @@
-# 🎨 Bemasnap Background Removal API
+# 🎨 Background Removal API
 
 > API REST para remoção automática de fundo de imagens usando inteligência artificial
 
